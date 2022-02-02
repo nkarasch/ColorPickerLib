@@ -338,7 +338,7 @@
 											DisplayLength="6"
 											IsDisplayLengthFixed="True"
 											IsReadOnly="False"
-											MaxValue="359"
+											MaxValue="360"
 											MinValue="0"
 											StepSize="1"
 											Value="{Binding H, ValidatesOnDataErrors=True, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">

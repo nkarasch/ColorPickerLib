@@ -27,6 +27,7 @@
 		private const string PART_SpectrumSlider = "PART_SpectrumSlider";
 		private const string PART_HexadecimalTextBox = "PART_HexadecimalTextBox";
 
+		private PersistentColor _persistentColor = new PersistentColor(0xFF, 0xFF, 0xFF, 0xFF);
 		private TranslateTransform _colorShadeSelectorTransform = new TranslateTransform();
 		private Canvas _colorShadingCanvas;
 		private Canvas _colorShadeSelector;
@@ -34,6 +35,7 @@
 		private TextBox _hexadecimalTextBox;
 		private Point? _currentColorPosition;
 		private bool _surpressPropertyChanged;
+		private bool _supressHexadecimalColorUpdates;
 
 		#endregion fields
 
@@ -79,13 +81,47 @@
 
 		protected virtual void OnSelectedColorChanged(Color? oldValue, Color? newValue)
 		{
-			SetHexadecimalStringProperty(ColorUtilities.GetFormatedColorString(newValue, UsingAlphaChannel), false);
-			UpdateRGBValues(newValue);
-			UpdateColorShadeSelectorPosition(newValue);
-
-			RoutedPropertyChangedEventArgs<Color?> args = new RoutedPropertyChangedEventArgs<Color?>(oldValue, newValue);
+			if(newValue.HasValue && newValue.Value != _persistentColor.DisplayColor)
+            {
+				UpdateSelectedColorViaRGB(newValue.Value.A, newValue.Value.R, newValue.Value.G, newValue.Value.B);
+			}
+			RoutedPropertyChangedEventArgs<Color?> args = new RoutedPropertyChangedEventArgs<Color?>(oldValue, _persistentColor.DisplayColor);
 			args.RoutedEvent = SelectedColorChangedEvent;
 			RaiseEvent(args);
+		}
+
+		private void UpdateSelectedColorViaRGB(Color? color)
+		{
+			if ((color != null) && color.HasValue)
+			{
+				UpdateSelectedColorViaRGB(color.Value.A, color.Value.R, color.Value.G, color.Value.B);
+			}
+		}
+
+		private void UpdateSelectedColorViaRGB(byte? Alpha, byte? Red, byte? Green, byte? Blue)
+		{
+			_persistentColor.Update(Alpha, Red, Green, Blue);
+			SetHexadecimalStringProperty(ColorUtilities.GetFormatedColorString(_persistentColor.DisplayColor, UsingAlphaChannel), false);
+			UpdateRGBValues();
+			UpdateColorShadeSelectorPosition();
+			SelectedColor = _persistentColor.DisplayColor;
+		}
+
+		private void UpdateSelectedColorViaHSB(double? Hue, double? Saturation, double? Brightness)
+		{
+			_persistentColor.Update(Hue, Saturation, Brightness);
+			SetHexadecimalStringProperty(ColorUtilities.GetFormatedColorString(_persistentColor.DisplayColor, UsingAlphaChannel), false);
+			UpdateRGBValues();
+			UpdateColorShadeSelectorPosition();
+			SelectedColor = _persistentColor.DisplayColor;
+		}
+
+		private void UpdateSelectedColorViaAlpha(byte? Alpha)
+		{
+			_persistentColor.Update(Alpha);
+			SetHexadecimalStringProperty(ColorUtilities.GetFormatedColorString(_persistentColor.DisplayColor, UsingAlphaChannel), false);
+			UpdateRGBValues();
+			SelectedColor = _persistentColor.DisplayColor;
 		}
 
 		#endregion SelectedColor
@@ -123,7 +159,7 @@
 		protected virtual void OnAChanged(byte oldValue, byte newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColor();
+				UpdateSelectedColorViaAlpha(newValue);
 		}
 
 		#endregion A
@@ -159,7 +195,7 @@
 		protected virtual void OnRChanged(byte oldValue, byte newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColor();
+				UpdateSelectedColorViaRGB(null, newValue, null, null);
 		}
 
 		#endregion R
@@ -193,7 +229,7 @@
 		protected virtual void OnGChanged(byte oldValue, byte newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColor();
+				UpdateSelectedColorViaRGB(null, null, newValue, null);
 		}
 
 		#endregion G
@@ -227,7 +263,7 @@
 		protected virtual void OnBChanged(byte oldValue, byte newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColor();
+				UpdateSelectedColorViaRGB(null, null, null, newValue);
 		}
 
 		#endregion B
@@ -263,7 +299,7 @@
 		protected virtual void OnHChanged(double oldValue, double newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColorFromHSV(H, S, V);
+				UpdateSelectedColorViaHSB(newValue, null, null);
 		}
 
 		#endregion H
@@ -291,7 +327,7 @@
 		protected virtual void OnSChanged(double oldValue, double newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColorFromHSV(H, S, V);
+				UpdateSelectedColorViaHSB(null, newValue, null);
 		}
 
 		#endregion S
@@ -319,7 +355,7 @@
 		protected virtual void OnVChanged(double oldValue, double newValue)
 		{
 			if (!_surpressPropertyChanged)
-				UpdateSelectedColorFromHSV(H, S, V);
+				UpdateSelectedColorViaHSB(null, null, newValue);
 		}
 
 		#endregion V
@@ -373,16 +409,16 @@
 		{
 			string newColorString = GetFormatedColorString(newValue);
 			string currentColorString = ColorUtilities.GetFormatedColorString(SelectedColor, UsingAlphaChannel);
-			if (!currentColorString.Equals(newColorString))
+			if (!_supressHexadecimalColorUpdates && !currentColorString.Equals(newColorString))
 			{
 				Color? col = null;
 				if (!string.IsNullOrEmpty(newColorString))
 				{
 					col = (Color)ConvertFromString(newColorString);
 				}
-				UpdateSelectedColor(col);
+				UpdateSelectedColorViaRGB(col);
 			}
-
+			_supressHexadecimalColorUpdates = false;
 			SetHexadecimalTextBoxTextProperty(newValue);
 		}
 
@@ -503,8 +539,15 @@
 				_hexadecimalTextBox.LostFocus += new RoutedEventHandler(HexadecimalTextBox_LostFocus);
 			}
 
-			UpdateRGBValues(SelectedColor);
-			UpdateColorShadeSelectorPosition(SelectedColor);
+			if (_persistentColor != null)
+			{
+				_persistentColor.Update(SelectedColor);
+			}
+			else
+			{
+				_persistentColor = new PersistentColor(SelectedColor);
+			}
+			UpdateColorShadeSelectorPosition();
 
 			// When changing theme, HexadecimalString needs to be set since it is not binded.
 			SetHexadecimalTextBoxTextProperty(ColorUtilities.GetFormatedColorString(SelectedColor, UsingAlphaChannel));
@@ -519,10 +562,9 @@
 			{
 				var backUPColor = SelectedColor;
 
-				SelectedColor = Color.FromArgb(00, 00, 00, 00);
-				SelectedColor = Color.FromArgb(0xff, 0xff, 0xff, 0xff);
-
-				SelectedColor = backUPColor;
+				UpdateSelectedColorViaRGB(00, 00, 00, 00);
+				UpdateSelectedColorViaRGB(0xff, 0xff, 0xff, 0xff);
+				UpdateSelectedColorViaRGB(backUPColor.Value.A, backUPColor.Value.R, backUPColor.Value.G, backUPColor.Value.B);
 			}
 		}
 
@@ -585,7 +627,7 @@
 		{
 			if ((_currentColorPosition != null) && (this.SelectedColor != null))
 			{
-				CalculateColor((Point)_currentColorPosition);
+				UpdateSelectedColorViaHSB(360 - _spectrumSlider.Value, null, null);
 			}
 		}
 
@@ -622,31 +664,31 @@
 		/// <param name="hue"></param>
 		/// <param name="saturation"></param>
 		/// <param name="value"></param>
-		private void UpdateSelectedColorFromHSV(double hue,
-												double saturation,
-												double value)
-		{
-			var color = HsvColor.RGBFromHSV(new HsvColor(hue, saturation, value));
+		//private void UpdateSelectedColorFromHSV(double hue,
+		//										double saturation,
+		//										double value)
+		//{
+		//	var color = HsvColor.RGBFromHSV(new HsvColor(hue, saturation, value));
 
-			UpdateRGBValues(Color.FromArgb(A, color.R, color.G, color.B));
-			UpdateSelectedColor();
-		}
+		//	UpdateRGBValues(Color.FromArgb(A, color.R, color.G, color.B));
+		//	UpdateSelectedColor();
+		//}
 
 		/// <summary>
 		/// Updates the currently selected color of the color canvas
 		/// from the A,R,G,B parameters in the color canvas .
 		/// </summary>
-		private void UpdateSelectedColor()
-		{
-			SelectedColor = Color.FromArgb(A, R, G, B);
-		}
+		//private void UpdateSelectedColor()
+		//{
+		//	SelectedColor = Color.FromArgb(A, R, G, B);
+		//}
 
-		private void UpdateSelectedColor(Color? color)
-		{
-			SelectedColor = ((color != null) && color.HasValue)
-							? (Color?)Color.FromArgb(color.Value.A, color.Value.R, color.Value.G, color.Value.B)
-							: null;
-		}
+		//private void UpdateSelectedColor(Color? color)
+		//{
+		//	SelectedColor = ((color != null) && color.HasValue)
+		//					? (Color?)Color.FromArgb(color.Value.A, color.Value.R, color.Value.G, color.Value.B)
+		//					: null;
+		//}
 
 		/// <summary>
 		/// Updates all color channels in all spaces (Opacity, RGB, HSV)
@@ -654,23 +696,21 @@
 		/// color parameter 'Has No Value' or is null.
 		/// </summary>
 		/// <param name="color"></param>
-		private void UpdateRGBValues(Color? color)
+		private void UpdateRGBValues()
 		{
-			if ((color == null) || !color.HasValue)
+			if (_persistentColor == null)
 				return;
 
 			_surpressPropertyChanged = true;
 
-			A = color.Value.A;
-			R = color.Value.R;
-			G = color.Value.G;
-			B = color.Value.B;
+			A = _persistentColor.DisplayColor.A;
+			R = _persistentColor.DisplayColor.R;
+			G = _persistentColor.DisplayColor.G;
+			B = _persistentColor.DisplayColor.B;
 
-			HsvColor hsv = HsvColor.RGBToHSV(color);
-
-			H = hsv.Hue;
-			S = hsv.Saturation;
-			V = hsv.Value;
+			H = _persistentColor.Hue;
+			S = _persistentColor.Saturation;
+			V = _persistentColor.Value;
 
 			_surpressPropertyChanged = false;
 		}
@@ -698,23 +738,23 @@
 			_currentColorPosition = p;
 
 			if (calculateColor)
-				CalculateColor(p);
+				UpdateSelectedColorViaHSB(null, p.X, 1 - p.Y);
 		}
 
-		private void UpdateColorShadeSelectorPosition(Color? color)
+		private void UpdateColorShadeSelectorPosition()
 		{
-			if ((_spectrumSlider == null) || (_colorShadingCanvas == null) || (color == null) || !color.HasValue)
+			if ((_spectrumSlider == null) || (_colorShadingCanvas == null) || (_persistentColor == null))
 				return;
 
 			_currentColorPosition = null;
 
-			HsvColor hsv = HsvColor.RGBToHSV(color);
+			//HsvColor hsv = HsvColor.RGBToHSV(color);
 			//            HsvColor hsv = ColorUtilities.ConvertRgbToHsv(color.Value.R, color.Value.G, color.Value.B);
 
-			if (!(color.Value.R == color.Value.G && color.Value.R == color.Value.B))
-				_spectrumSlider.Value = 359 - hsv.Hue;
+			if (!(_persistentColor.DisplayColor.R == _persistentColor.DisplayColor.G && _persistentColor.DisplayColor.R == _persistentColor.DisplayColor.B))
+				_spectrumSlider.Value = 360 - _persistentColor.Hue;
 
-			Point p = new Point(hsv.Saturation, 1 - hsv.Value);
+			Point p = new Point(_persistentColor.Saturation, 1 - _persistentColor.Value);
 
 			_currentColorPosition = p;
 
@@ -722,18 +762,18 @@
 			_colorShadeSelectorTransform.Y = (p.Y * _colorShadingCanvas.Height) - 5;
 		}
 
-		private void CalculateColor(Point p)
-		{
-			HsvColor hsv = new HsvColor(359 - _spectrumSlider.Value, p.X, 1 - p.Y);
+		//private void CalculateColor(Point p)
+		//{
+		//	HsvColor hsv = new HsvColor(359 - _spectrumSlider.Value, p.X, 1 - p.Y);
 
-			//            var currentColor = ColorUtilities.ConvertHsvToRgb(hsv.Hue, hsv.Saturation, hsv.Value);
-			var currentColor = HsvColor.RGBFromHSV(hsv);
-			currentColor.A = A;
-			SelectedColor = currentColor;
-			string newColor = ColorUtilities.GetFormatedColorString(SelectedColor, UsingAlphaChannel);
+		//	//            var currentColor = ColorUtilities.ConvertHsvToRgb(hsv.Hue, hsv.Saturation, hsv.Value);
+		//	var currentColor = HsvColor.RGBFromHSV(hsv);
+		//	currentColor.A = A;
+		//	SelectedColor = currentColor;
+		//	string newColor = ColorUtilities.GetFormatedColorString(SelectedColor, UsingAlphaChannel);
 
-			SetHexadecimalStringProperty(newColor, false);
-		}
+		//	SetHexadecimalStringProperty(newColor, false);
+		//}
 
 		private string GetFormatedColorString(string stringToFormat)
 		{
@@ -762,6 +802,7 @@
 			{
 				//When HexadecimalString is changed via Code-Behind, hexadecimal format will be evaluated in OnCoerceHexadecimalString()
 				HexadecimalString = newValue;
+				_supressHexadecimalColorUpdates = true;
 			}
 		}
 

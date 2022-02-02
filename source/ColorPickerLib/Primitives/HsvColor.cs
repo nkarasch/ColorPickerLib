@@ -1,4 +1,4 @@
-﻿namespace ColorPickerLib.Primitives
+﻿/*namespace ColorPickerLib.Primitives
 {
 	using System;
 	using System.Windows.Media;
@@ -114,4 +114,4 @@
 				return Color.FromArgb(255, v, p, q);
 		}
 	}
-}
+}*/
